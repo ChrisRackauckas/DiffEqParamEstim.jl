@@ -86,19 +86,19 @@ function two_stage_method(prob::DiffEqBase.DEProblem, tpoints, data; kernel= :Ep
     # Step - 2
     cost_function = function (p)
         println("\n")
-        println("p is ", p)
+        println("Current p is ", p)
         println("\n")
         du = similar(prob.u0, eltype(prob.u0))
         sol = Vector{typeof(du)}(undef,n)
         f = prob.f
         println("\n")
-        println("f is ", prob.f)
+        println("Current f is ", prob.f)
         println("\n")
 
         for i in 1:n
           est_sol = @view estimated_solution[:,i]
           #print("fargs ", du, est_sol, p, tpoints[i])
-          du = f(du, est_sol, p, i)
+          f(du, est_sol, p, i)
           sol[i] = copy(du)
         end
         #print("sum args", estimated_derivative, sol)
@@ -136,15 +136,8 @@ end
 
 function node_two_stage_function(model, x, tspan, saveat, ode_data,
                        args...; kwargs...)
-    function dudt_(du,u0,p,t)
-        #println("du: ",(du))
-        #println("u: ",(u0))
-        #println("type u: ",typeof(u0))
-        #println("model u: ",model)
-        #println("typeof model u: ",typeof(model))
-        du=model[:,t]
-        du
-    end
+    dudt_(du,u::TrackedArray,p,t) = du .= restructure(model,p)(u)
+    dudt_(du,u::AbstractArray,p,t) = du .= Flux.data(restructure(model,p)(u))
     prob_fly = ODEProblem(dudt_,param(x),tspan)
     two_stage_method(prob_fly, saveat, ode_data)
 end
@@ -157,12 +150,12 @@ end
 #  end
 #  return vcat(vec.(xs)...)
 #end
-#function restructure(m, xs)
-#  i = 0
-#  mapleaves(m) do x
-#    x isa TrackedArray || return x
-#    x = reshape(xs[i.+(1:length(x))], size(x))
-#    i += length(x)
-#    return x
-#  end
-#end
+function restructure(m, xs)
+  i = 0
+  mapleaves(m) do x
+    x isa TrackedArray || return x
+    x = reshape(xs[i.+(1:length(x))], size(x))
+    i += length(x)
+    return x
+  end
+end
